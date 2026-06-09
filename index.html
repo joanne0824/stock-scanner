@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台股外資動向追蹤</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0f14;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 16px;
+  }
+  .header {
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+  }
+  .title { font-size: 20px; font-weight: 700; color: #e8c840; }
+  .subtitle { font-size: 12px; color: #666; margin-top: 4px; }
+  .update-time { font-size: 11px; color: #555; margin-top: 8px; }
+  .no-data { color: #666; text-align: center; padding: 40px; }
+
+  /* 股票卡片 */
+  .card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .stock-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .stock-code { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* 標籤 */
+  .badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+  .badge-same {
+    background: rgba(105,219,124,0.15);
+    color: #69db7c;
+    border: 1px solid rgba(105,219,124,0.3);
+  }
+  .badge-div {
+    background: rgba(255,200,0,0.15);
+    color: #ffd43b;
+    border: 1px solid rgba(255,200,0,0.3);
+  }
+  .badge-watch {
+    background: rgba(100,100,100,0.2);
+    color: #aaa;
+    border: 1px solid rgba(100,100,100,0.3);
+  }
+
+  /* 指標格 */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .metric {
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+  }
+  .metric-label { font-size: 10px; color: #666; margin-bottom: 4px; }
+  .metric-value { font-size: 14px; font-weight: 700; }
+  .positive { color: #69db7c; }
+  .negative { color: #ff6b6b; }
+  .neutral  { color: #e0e0e0; }
+  .warning  { color: #ffd43b; }
+
+  /* Checklist */
+  .checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .check-item {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+  }
+  .check-pass { color: #69db7c; }
+  .check-fail { color: #ff6b6b; }
+
+  /* 明細表 */
+  .detail-section { margin-top: 12px; }
+  .detail-title {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th {
+    color: #666;
+    font-weight: 500;
+    padding: 6px 8px;
+    text-align: right;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  th:first-child { text-align: left; }
+  td {
+    padding: 6px 8px;
+    text-align: right;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  td:first-child { text-align: left; color: #888; }
+
+  /* 分隔線 */
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 12px 0;
+  }
+
+  /* 成本狀態 */
+  .cost-status {
+    font-size: 12px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .cost-profit {
+    background: rgba(105,219,124,0.08);
+    border: 1px solid rgba(105,219,124,0.2);
+  }
+  .cost-loss {
+    background: rgba(255,100,100,0.08);
+    border: 1px solid rgba(255,100,100,0.2);
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">台股外資動向追蹤</div>
+  <div class="subtitle">摩根士丹利分點 · 內外資籌碼分析</div>
+  <div class="update-time" id="update-time">載入中...</div>
+</div>
+
+<div id="content">
+  <div class="no-data">載入資料中...</div>
+</div>
+
+<script>
+fetch('data.json?t=' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('update-time').textContent =
+      '更新時間：' + data.update_time;
+
+    const content = document.getElementById('content');
+
+    if (!data.stocks || data.stocks.length === 0) {
+      content.innerHTML = '<div class="no-data">今日無符合條件股票</div>';
+      return;
+    }
+
+    content.innerHTML = data.stocks.map(s => {
+      // 內外資方向標籤
+      let badgeClass = 'badge-watch';
+      let badgeText  = s.內外資方向 || '觀察';
+      if (s.內外資方向 && s.內外資方向.includes('同向')) badgeClass = 'badge-same';
+      if (s.內外資方向 && s.內外資方向.includes('背離')) badgeClass = 'badge-div';
+
+      // 成本狀態
+      const costPct  = parseFloat(s['現價vs成本%']) || 0;
+      const costClass = costPct >= 0 ? 'cost-profit' : 'cost-loss';
+      const costText  = costPct >= 0
+        ? `摩根獲利 +${costPct.toFixed(1)}%`
+        : `摩根套牢 ${costPct.toFixed(1)}%`;
+
+      // Checklist
+      const checks = [
+        ['摩根淨買>0',  s['摩根淨買>0']],
+        ['摩根加速≥60%', s['摩根加速≥60%']],
+        ['外資>3000張', s['外資>3000張']],
+        ['摩根占量≥5%', s['摩根占量≥5%']],
+        ['投信同向',    s['投信同向']],
+        ['投信連買≥3日', s['投信連買≥3日']],
+        ['股價>5MA',   s['股價>5MA']],
+        ['止跌訊號',    s['止跌訊號']],
+      ];
+      const checkHtml = checks.map(([label, val]) => {
+        const pass = val === '✅';
+        return `<span class="check-item ${pass ? 'check-pass' : 'check-fail'}">
+          ${pass ? '✓' : '✗'} ${label}
+        </span>`;
+      }).join('');
+
+      // 摩根每日明細
+      const morganRows = (s.morgan_daily || []).map(d =>
+        `<tr>
+          <td>${d['日期']}</td>
+          <td style="color:${d['買超張']>0?'#69db7c':'#ff6b6b'}">${d['買超張'] > 0 ? '+' : ''}${d['買超張']}</td>
+          <td>${d['均買價']}</td>
+          <td>${d['均賣價'] || '—'}</td>
+        </tr>`
+      ).join('');
+
+      // 外資整體明細
+      const fiRows = (s.fi_daily || []).map(d =>
+        `<tr>
+          <td>${d['日期']}</td>
+          <td style="color:${d['外資淨買張']>0?'#69db7c':'#ff6b6b'}">${d['外資淨買張'] > 0 ? '+' : ''}${d['外資淨買張']}</td>
+          <td>${d['均價(估)']}</td>
+        </tr>`
+      ).join('');
+
+      return `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="stock-name">${s['名稱']}</div>
+            <div class="stock-code">${s['代碼']}</div>
+          </div>
+          <div>
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <div style="text-align:right;font-size:11px;color:#666;margin-top:4px">
+              加分 ${s['加分得分']}
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">收盤價</div>
+            <div class="metric-value neutral">${s['收盤價']}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">5日漲幅</div>
+            <div class="metric-value ${parseFloat(s['5日漲幅%'])>=0?'positive':'negative'}">
+              ${parseFloat(s['5日漲幅%'])>=0?'+':''}${s['5日漲幅%']}%
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">摩根加速</div>
+            <div class="metric-value warning">${s['摩根加速%']}%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">摩根5日淨買</div>
+            <div class="metric-value ${parseFloat(s['摩根5日淨買張'])>=0?'positive':'negative'}">
+              ${s['摩根5日淨買張']}張
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">外資10日淨買</div>
+            <div class="metric-value ${parseFloat(s['外資10日淨買張'])>=0?'positive':'negative'}">
+              ${Math.round(s['外資10日淨買張'])}張
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">投信連買日</div>
+            <div class="metric-value ${parseInt(s['投信連買日'])>=3?'positive':'neutral'}">
+              ${s['投信連買日']}日
+            </div>
+          </div>
+        </div>
+
+        <div class="checklist">${checkHtml}</div>
+
+        <div class="cost-status ${costClass}">
+          <span>摩根均成本 ${s['摩根5日均成本']}</span>
+          <span>${costText}</span>
+        </div>
+
+        <hr class="divider">
+
+        <div class="detail-section">
+          <div class="detail-title">▶ 摩根士丹利每日明細（張）</div>
+          <table>
+            <tr><th>日期</th><th>買超張</th><th>均買價</th><th>均賣價</th></tr>
+            ${morganRows}
+          </table>
+        </div>
+
+        <div class="detail-section" style="margin-top:12px">
+          <div class="detail-title">▶ 外資整體每日明細（均價估算）</div>
+          <table>
+            <tr><th>日期</th><th>淨買張</th><th>均價(估)</th></tr>
+            ${fiRows}
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+  })
+  .catch(() => {
+    document.getElementById('update-time').textContent = '尚無資料';
+    document.getElementById('content').innerHTML =
+      '<div class="no-data">尚未有今日資料，請稍後再試</div>';
+  });
+</script>
+</body>
+</html>
